@@ -6,6 +6,9 @@ import Admin from "../pages/Admin";
 import ClientDashboard from '../pages/ClientDashboard';
 import Login from '../pages/Login';
 import Register from '../Register';
+import AdminTickets from '../pages/AdminTickets';
+import PropTypes from 'prop-types';
+ 
 
 import { auth, db } from '../../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -35,6 +38,9 @@ function ProtectedRoute({ children }) {
 
   return children;
 }
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+};
 
 // Admin Route component
 function AdminRoute({ children }) {
@@ -71,7 +77,9 @@ function AdminRoute({ children }) {
 
   return children;
 }
-
+AdminRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+};
 function Routers() {
   return (
     <Routes>
@@ -111,6 +119,16 @@ function Routers() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/admintickets"
+        element={
+          <ProtectedRoute>
+            <AdminRoute>
+              <AdminTickets />
+            </AdminRoute>
+          </ProtectedRoute>
+        }
+        />
     </Routes>
   );
 }
