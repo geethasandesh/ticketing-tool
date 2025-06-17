@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Home, FolderOpen, Ticket, LogOut, Users, User, UserCheck, FolderKanban, Monitor, Bell } from 'lucide-react';
 import { signOut } from 'firebase/auth';
@@ -8,6 +8,7 @@ import Projects from './Projects';
 
 function Admin() {
   const navigate = useNavigate();
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [stats, setStats] = useState({
     totalClients: 0,
     totalEmployees: 0,
@@ -18,10 +19,29 @@ function Admin() {
   });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [showLogoutDropdown, setShowLogoutDropdown] = useState(false);
+  const dropdownRef = useRef(null); // Ref for the dropdown container
 
   useEffect(() => {
     fetchStats();
-  }, []);
+
+    // Handle clicks outside the dropdown
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowLogoutDropdown(false);
+      }
+    };
+
+    if (showLogoutDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showLogoutDropdown]); // Re-run effect when dropdown visibility changes
 
   const fetchStats = async () => {
     try {
@@ -191,66 +211,52 @@ function Admin() {
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
-      <div className="w-80 bg-slate-700 text-white">
+      <div className={`bg-slate-700 text-white flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-80'}`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-600">
-          <h1 className="text-xl font-semibold">Admin Panel</h1>
-          <button className="p-1 hover:bg-slate-600 rounded">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+          {!isSidebarCollapsed && <h1 className="text-xl font-semibold">Admin Panel</h1>}
+          <button className="p-1 hover:bg-slate-600 rounded" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>
+            {isSidebarCollapsed ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            )}
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="mt-4">
-          <div 
-            className={`px-4 py-3 cursor-pointer ${activeTab === 'dashboard' ? 'bg-slate-600 border-l-4 border-blue-500' : 'hover:bg-slate-600'}`}
-            onClick={() => handleNavigation('dashboard')}
-          >
-            <div className="flex items-center space-x-3">
-              <Home className="w-5 h-5" />
-              <span className="font-medium">Dashboard</span>
-            </div>
-          </div>
-          
-          <div 
-            className={`px-4 py-3 cursor-pointer ${activeTab === 'projects' ? 'bg-slate-600 border-l-4 border-blue-500' : 'hover:bg-slate-600'}`}
-            onClick={() => handleNavigation('projects')}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <FolderOpen className="w-5 h-5" />
-                <span>Projects</span>
-              </div>
-              <span className="bg-slate-600 text-xs px-2 py-1 rounded-full">{stats.totalProjects}</span>
-            </div>
-          </div>
-
-          <div 
-            className={`px-4 py-3 cursor-pointer ${activeTab === 'tickets' ? 'bg-slate-600 border-l-4 border-blue-500' : 'hover:bg-slate-600'}`}
-            onClick={() => handleNavigation('tickets')}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Ticket className="w-5 h-5" />
-                <span>Tickets</span>
-              </div>
-              <span className="bg-slate-600 text-xs px-2 py-1 rounded-full">{stats.totalTickets}</span>
-            </div>
-          </div>
+        <nav className="mt-6">
+          <ul>
+            <li
+              className={`flex items-center p-4 cursor-pointer hover:bg-slate-600 ${activeTab === 'dashboard' ? 'bg-slate-600' : ''} ${isSidebarCollapsed ? 'justify-center' : ''}`}
+              onClick={() => handleNavigation('dashboard')}
+            >
+              <Home className={`w-5 h-5 ${isSidebarCollapsed ? 'mr-0' : 'mr-3'}`} />
+              {!isSidebarCollapsed && "Dashboard"}
+            </li>
+            <li
+              className={`flex items-center p-4 cursor-pointer hover:bg-slate-600 ${activeTab === 'projects' ? 'bg-slate-600' : ''} ${isSidebarCollapsed ? 'justify-center' : ''}`}
+              onClick={() => handleNavigation('projects')}
+            >
+              <FolderOpen className={`w-5 h-5 ${isSidebarCollapsed ? 'mr-0' : 'mr-3'}`} />
+              {!isSidebarCollapsed && "Projects"}
+            </li>
+            <li
+              className={`flex items-center p-4 cursor-pointer hover:bg-slate-600 ${activeTab === 'tickets' ? 'bg-slate-600' : ''} ${isSidebarCollapsed ? 'justify-center' : ''}`}
+              onClick={() => handleNavigation('tickets')}
+            >
+              <Ticket className={`w-5 h-5 ${isSidebarCollapsed ? 'mr-0' : 'mr-3'}`} />
+              {!isSidebarCollapsed && "Tickets"}
+            </li>
+            <li
+              className={`flex items-center p-4 cursor-pointer hover:bg-slate-600 ${isSidebarCollapsed ? 'justify-center' : ''}`}
+              onClick={handleLogout}
+            >
+              <LogOut className={`w-5 h-5 ${isSidebarCollapsed ? 'mr-0' : 'mr-3'}`} />
+              {!isSidebarCollapsed && "Logout"}
+            </li>
+          </ul>
         </nav>
-
-        {/* Logout */}
-        <div className="absolute bottom-4 left-4">
-          <div 
-            className="flex items-center space-x-3 px-4 py-3 hover:bg-slate-600 cursor-pointer rounded"
-            onClick={handleLogout}
-          >
-            <LogOut className="w-5 h-5" />
-            <span>Logout</span>
-          </div>
-        </div>
       </div>
 
       {/* Main Content */}
@@ -264,17 +270,34 @@ function Admin() {
                 <Bell className="w-6 h-6 text-gray-600" />
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                  <User className="w-5 h-5 text-gray-600" />
-                </div>
-                <span className="text-gray-700 font-medium">{auth.currentUser?.email || 'Admin'}</span>
+              {/* User Icon for Logout */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowLogoutDropdown(!showLogoutDropdown)}
+                  className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors focus:outline-none"
+                >
+                  <User className="w-6 h-6" />
+                  {/* Optional: Display user email/name */}
+                  {/* <span>{auth.currentUser?.email || 'Admin'}</span> */}
+                </button>
+
+                {/* Logout Dropdown */}
+                {showLogoutDropdown && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg py-1 z-10" ref={dropdownRef}>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" /> Logout
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Content Area */}
+        {/* Page Content */}
         {renderContent()}
       </div>
     </div>

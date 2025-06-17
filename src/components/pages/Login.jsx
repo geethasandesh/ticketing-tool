@@ -59,16 +59,11 @@ const Login = () => {
         case 'admin':
           navigate("/admin");
           break;
-        case 'c-suite':
-          navigate("/csuite");
-          break;
-        case 'hr':
-        case 'manager':
-        case 'supermanager':
-        case 'tl':
         case 'employee':
+          navigate("/employee");
+          break;
         case 'client':
-          navigate("/dashboard");
+          navigate("/clientdashboard");
           break;
         default:
           navigate("/access-denied");

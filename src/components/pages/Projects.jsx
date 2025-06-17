@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, setDoc, query, where, arrayUnion, arrayRemove, onSnapshot } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { db, auth } from '../../firebase/config';
 import { Plus, Users, X, Edit2, Trash2, UserPlus, CheckCircle2, User, Briefcase, ChevronDown, ChevronUp, FolderOpen, AlertTriangle } from 'lucide-react';
@@ -24,26 +24,26 @@ function Projects() {
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
   const [editingMember, setEditingMember] = useState(null);
   const [showEditMemberModal, setShowEditMemberModal] = useState(false);
-  const [showProjectDetailsModal, setShowProjectDetailsModal] = useState(false);
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  const fetchProjects = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'projects'));
-      const projectsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+    const unsubscribe = onSnapshot(collection(db, 'projects'), (querySnapshot) => {
+      const projectsData = querySnapshot.docs.map(doc => {
+        console.log('Processing project document:', doc.id, doc.data());
+        return {
+          id: doc.id,
+          ...doc.data()
+        };
+      });
+      console.log('Real-time projects data received (total documents):', projectsData.length, projectsData);
       setProjects(projectsData);
-    } catch (error) {
-      console.error('Error fetching projects:', error);
-    } finally {
       setLoading(false);
-    }
-  };
+    }, (error) => {
+      console.error('Error fetching real-time projects:', error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe(); // Cleanup the listener on component unmount
+  }, []);
 
   const handleAddProject = async (e) => {
     e.preventDefault();
@@ -82,27 +82,59 @@ function Projects() {
         return;
       }
 
-      // Create user account
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password
-      );
+      let memberUid;
+      let userRef;
+      let finalRole;
 
       // Determine the role based on user type and role
-      let finalRole;
       if (formData.userType === 'client') {
         finalRole = formData.role === 'head' ? 'client_head' : 'client';
       } else {
         finalRole = formData.role === 'manager' ? 'project_manager' : 'employee';
       }
 
-      // Add user to project members
+      // Check if user already exists in Firestore users collection by email
+      const usersQuery = query(collection(db, 'users'), where('email', '==', formData.email));
+      const userSnapshot = await getDocs(usersQuery);
+
+      if (!userSnapshot.empty) {
+        // User exists, update existing document
+        userRef = userSnapshot.docs[0].ref;
+        memberUid = userSnapshot.docs[0].id; // Get existing UID
+        await updateDoc(userRef, {
+          role: finalRole,
+          userType: formData.userType,
+          updatedAt: new Date().toISOString(),
+          updatedBy: currentAdmin.uid,
+          projects: arrayUnion(selectedProject.id), // Add project to user's projects array
+          // If status was pending, keep it pending unless actively changing role
+          // Do not update password here as it might be temporary or admin cannot change user's password
+        });
+        showNotification(`${formData.email} details updated and added to project.`);
+      } else {
+        // User does not exist, create a new pending user document
+        memberUid = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        userRef = doc(db, 'users', memberUid);
+        await setDoc(userRef, {
+          email: formData.email,
+          role: finalRole,
+          userType: formData.userType,
+          createdAt: new Date().toISOString(),
+          createdBy: currentAdmin.uid,
+          status: 'pending', // Indicates account needs to be created
+          password: formData.password, // Store password temporarily for account creation
+          projects: [selectedProject.id] // Initialize projects array with current project
+        });
+        showNotification(`${formData.email} has been added to the project. Account will be created when they first log in.`);
+      }
+
+      // Add user to project members (using the determined memberUid)
       const updatedMembers = [...(selectedProject.members || []), {
         email: formData.email,
         role: finalRole,
-        uid: userCredential.user.uid,
-        userType: formData.userType
+        uid: memberUid,
+        userType: formData.userType,
+        status: userSnapshot.empty ? 'pending' : (userSnapshot.docs[0].data().status || 'active') // Keep existing status or set pending
       }];
 
       await updateDoc(doc(db, 'projects', selectedProject.id), {
@@ -116,6 +148,11 @@ function Projects() {
           : p
       );
       setProjects(updatedProjects);
+      // Update selected project to reflect new members immediately
+      const newlySelectedProject = updatedProjects.find(p => p.id === selectedProject.id);
+      if (newlySelectedProject) {
+        setSelectedProject(newlySelectedProject);
+      }
       setShowAddPersonModal(false);
       setFormData({ 
         name: '', 
@@ -126,14 +163,9 @@ function Projects() {
         userType: 'client'
       });
       
-      // Show success notification
-      showNotification(`${formData.email} has been successfully added as ${finalRole.replace('_', ' ')}`);
-
-      // Force a page reload to reset the auth state
-      window.location.reload();
     } catch (error) {
-      console.error('Error adding person:', error);
-      showNotification('Failed to add member. Please try again.', 'error');
+      console.error('Error adding/updating person:', error);
+      showNotification('Failed to add/update member. Please try again.', 'error');
     }
   };
 
@@ -223,255 +255,131 @@ function Projects() {
     }
   };
 
-  const renderProjectDetailsModal = () => {
-    if (!selectedProject) return null;
+  const handleDeleteMember = async (memberToDelete, projectId) => {
+    console.log('handleDeleteMember called with:', memberToDelete, 'from project:', projectId);
+    
+    // Find the project from the projects array
+    const project = projects.find(p => p.id === projectId);
+    if (!project) {
+      console.log('Project not found');
+      return;
+    }
 
-    const clients = selectedProject.members?.filter(m => m.userType === 'client') || [];
-    const employees = selectedProject.members?.filter(m => m.userType === 'employee') || [];
+    try {
+      // Store current admin user
+      const currentAdmin = auth.currentUser;
+      if (!currentAdmin) {
+        showNotification('Admin session expired. Please log in again.', 'error');
+        return;
+      }
 
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 w-11/12 max-w-6xl max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold">{selectedProject.name}</h2>
-            <button
-              onClick={() => {
-                setShowProjectDetailsModal(false);
-                setSelectedProject(null);
-              }}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <X size={24} />
-            </button>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-6">
-            {/* Clients Section */}
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">Clients</h3>
-                <button
-                  onClick={() => {
-                    setFormData({ ...formData, userType: 'client' });
-                    setShowAddPersonModal(true);
-                  }}
-                  className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
-                >
-                  <UserPlus size={20} />
-                  Add Client
-                </button>
-              </div>
-              <div className="space-y-3">
-                {clients.map((member) => (
-                  <div key={member.uid} className="bg-white p-3 rounded shadow-sm flex justify-between items-center">
-                    <div>
-                      <p className="font-medium">{member.email}</p>
-                      <p className="text-sm text-gray-600">{member.role.replace('_', ' ')}</p>
-                    </div>
-                    <button
-                      onClick={() => handleEditMember(member)}
-                      className="text-blue-600 hover:text-blue-800"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                  </div>
-                ))}
-                {clients.length === 0 && (
-                  <p className="text-gray-500 text-center py-4">No clients added yet</p>
-                )}
-              </div>
-            </div>
+      console.log('Removing member from project:', project.id);
+      // Remove member from project
+      const updatedMembers = project.members.filter(member => member.uid !== memberToDelete.uid);
+      console.log('Updated members:', updatedMembers);
+      
+      await updateDoc(doc(db, 'projects', project.id), {
+        members: updatedMembers
+      });
+      console.log('Project updated in Firestore');
 
-            {/* Employees Section */}
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">Employees</h3>
-                <button
-                  onClick={() => {
-                    setFormData({ ...formData, userType: 'employee' });
-                    setShowAddPersonModal(true);
-                  }}
-                  className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
-                >
-                  <UserPlus size={20} />
-                  Add Employee
-                </button>
-              </div>
-              <div className="space-y-3">
-                {employees.map((member) => (
-                  <div key={member.uid} className="bg-white p-3 rounded shadow-sm flex justify-between items-center">
-                    <div>
-                      <p className="font-medium">{member.email}</p>
-                      <p className="text-sm text-gray-600">{member.role.replace('_', ' ')}</p>
-                    </div>
-                    <button
-                      onClick={() => handleEditMember(member)}
-                      className="text-blue-600 hover:text-blue-800"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                  </div>
-                ))}
-                {employees.length === 0 && (
-                  <p className="text-gray-500 text-center py-4">No employees added yet</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+      // Delete user document from Firestore users collection
+      try {
+        await deleteDoc(doc(db, 'users', memberToDelete.uid));
+        console.log('User document deleted from Firestore');
+      } catch (error) {
+        console.error('Error deleting user document:', error);
+        // Continue even if user document doesn't exist
+      }
 
-  const renderEditMemberModal = () => {
-    if (!editingMember) return null;
+      // Remove project from user's projects array in Firestore
+      try {
+        const userDocRef = doc(db, 'users', memberToDelete.uid);
+        await updateDoc(userDocRef, {
+          projects: arrayRemove(projectId) // Remove project from user's projects array
+        });
+        console.log('Project removed from user document in Firestore');
+      } catch (error) {
+        console.error('Error removing project from user document:', error);
+        // Continue even if the user document or projects array doesn't exist
+      }
 
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 w-96">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">Edit Member Role</h2>
-            <button
-              onClick={() => {
-                setShowEditMemberModal(false);
-                setEditingMember(null);
-              }}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <X size={24} />
-            </button>
-          </div>
-          
-          <form onSubmit={handleUpdateMember} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                value={formData.email}
-                disabled
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                User Type
-              </label>
-              <select
-                value={formData.userType}
-                onChange={(e) => setFormData({ ...formData, userType: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              >
-                <option value="client">Client</option>
-                <option value="employee">Employee</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Role
-              </label>
-              <select
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              >
-                {formData.userType === 'client' ? (
-                  <>
-                    <option value="client">Client</option>
-                    <option value="head">Client Head</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="employee">Employee</option>
-                    <option value="manager">Project Manager</option>
-                  </>
-                )}
-              </select>
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowEditMemberModal(false);
-                  setEditingMember(null);
-                }}
-                className="px-4 py-2 text-gray-700 hover:text-gray-900"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Update Role
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    );
+      // Update local state
+      const updatedProjects = projects.map(p => 
+        p.id === project.id 
+          ? { ...p, members: updatedMembers }
+          : p
+      );
+      setProjects(updatedProjects);
+      console.log('Local state updated');
+      
+      // Update selected project if it's the same project
+      if (selectedProject && selectedProject.id === project.id) {
+        const newlySelectedProject = updatedProjects.find(p => p.id === project.id);
+        if (newlySelectedProject) {
+          setSelectedProject(newlySelectedProject);
+          console.log('Selected project updated');
+        }
+      }
+      
+      showNotification(`${memberToDelete.email} has been completely removed from the project and system`);
+    } catch (error) {
+      console.error('Error deleting member:', error);
+      showNotification('Failed to remove member from project', 'error');
+    }
   };
 
   return (
-    <div className="p-6">
-      {/* Notification Toast */}
+    <>
+      <div className="p-6 bg-gray-100 min-h-screen">
+        {/* Notification */}
       {notification.show && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center p-4 rounded-lg shadow-lg ${
-          notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-        } text-white`}>
-          <CheckCircle2 className="w-5 h-5 mr-2" />
-          <span>{notification.message}</span>
+          <div className={`mb-4 p-3 rounded-lg flex items-center ${notification.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            {notification.type === 'success' ? <CheckCircle2 size={20} className="mr-2" /> : <AlertTriangle size={20} className="mr-2" />}
+            {notification.message}
         </div>
       )}
 
-      {/* Header with Add Project Button */}
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-800">Projects</h2>
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-800">Projects Management</h2>
         <button
           onClick={() => setShowAddProjectModal(true)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
         >
-          <Plus className="w-5 h-5 mr-2" />
-          Add Project
+            <Plus size={20} /> Create New Project
         </button>
       </div>
 
-      {/* Projects List */}
+        {/* Project List */}
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          </div>
+        ) : (
       <div className="space-y-4">
+            {projects.length === 0 && <p className="text-gray-500 text-center col-span-full">No projects created yet.</p>}
         {projects.map(project => (
-          <div key={project.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            {/* Project Header */}
-            <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer"
-                 onClick={() => setExpandedProject(expandedProject === project.id ? null : project.id)}>
-              <div className="flex items-center space-x-4">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <FolderOpen className="w-6 h-6 text-blue-600" />
-                </div>
+              <div 
+                key={project.id} 
+                className="bg-white rounded-lg shadow-sm border p-5 cursor-pointer hover:shadow-md transition-shadow"
+              >
+                <div 
+                  className="flex justify-between items-center mb-4"
+                  onClick={() => setExpandedProject(expandedProject === project.id ? null : project.id)}
+                >
+                  <div className="flex items-center space-x-3">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800">{project.name}</h3>
-                  <p className="text-sm text-gray-500">{project.description}</p>
+                      <h3 className="text-lg font-semibold text-gray-900">{project.name}</h3>
+                      <p className="text-sm text-gray-600">{project.description}</p>
                 </div>
               </div>
-              <div className="flex items-center space-x-4">
-                <div className="text-sm text-gray-500">
-                  {project.members?.length || 0} members
-                </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-600">{project.members?.length || 0} members</span>
+                    
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedProject(project);
-                    setShowProjectDetailsModal(true);
-                  }}
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                >
-                  <FolderOpen className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={(e) => handleDeleteClick(project.id, e)}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteClick(project.id, e); }}
                   className="text-gray-400 hover:text-red-500 transition-colors"
                 >
                   <Trash2 className="w-5 h-5" />
@@ -484,39 +392,110 @@ function Projects() {
               </div>
             </div>
 
-            {/* Expanded Content */}
             {expandedProject === project.id && (
-              <div className="border-t border-gray-200 p-4">
+                  <div className="border-t border-gray-200 mt-4 pt-4">
+                    <h4 className="text-md font-semibold text-gray-800 mb-3">Team Members</h4>
+                    {project.members && project.members.length > 0 ? (
+                      <>
+                        {/* Clients Section */}
+                        {
+                          project.members.filter(member => member.userType === 'client').length > 0 && (
                 <div className="mb-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Team Members</h4>
-                  <div className="space-y-2">
-                    {project.members?.map((member, index) => (
-                      <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
+                              <h5 className="text-sm font-semibold text-gray-700 mb-2">Clients</h5>
+                              <ul className="space-y-2">
+                                {project.members.filter(member => member.userType === 'client').map((member, index) => (
+                                  <li key={index} className="flex justify-between items-center bg-gray-50 p-3 rounded-md">
                         <div className="flex items-center">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                            <Users className="w-4 h-4 text-blue-600" />
+                                      <User size={16} className="text-gray-500 mr-2" />
+                                      <span className="text-gray-700">{member.email}</span>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-sm text-gray-600 capitalize">{member.role?.replace('_', ' ')}</span>
+                                      <button
+                                        onClick={() => handleEditMember(member)}
+                                        className="text-blue-500 hover:text-blue-700 transition-colors"
+                                      >
+                                        <Edit2 size={16} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteMember(member, project.id);
+                                        }}
+                                        className="text-red-500 hover:text-red-700 transition-colors"
+                                        title="Remove member from project"
+                                      >
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
                           </div>
+                          )
+                        }
+
+                        {/* Employees Section */}
+                        {
+                          project.members.filter(member => member.userType === 'employee').length > 0 && (
                           <div>
-                            <p className="text-sm font-medium text-gray-800">{member.email}</p>
-                            <p className="text-xs text-gray-500 capitalize">{member.role.replace('_', ' ')}</p>
+                              <h5 className="text-sm font-semibold text-gray-700 mb-2">Employees</h5>
+                              <ul className="space-y-2">
+                                {project.members.filter(member => member.userType === 'employee').map((member, index) => (
+                                  <li key={index} className="flex justify-between items-center bg-gray-50 p-3 rounded-md">
+                                    <div className="flex items-center">
+                                      <User size={16} className="text-gray-500 mr-2" />
+                                      <span className="text-gray-700">{member.email}</span>
                           </div>
-                        </div>
-                        <button className="text-gray-400 hover:text-blue-600 transition-colors">
-                          <Edit2 className="w-4 h-4" />
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-sm text-gray-600 capitalize">{member.role?.replace('_', ' ')}</span>
+                                      <button
+                                        onClick={() => handleEditMember(member)}
+                                        className="text-blue-500 hover:text-blue-700 transition-colors"
+                                      >
+                                        <Edit2 size={16} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteMember(member, project.id);
+                                        }}
+                                        className="text-red-500 hover:text-red-700 transition-colors"
+                                        title="Remove member from project"
+                                      >
+                                        <Trash2 size={16} />
                         </button>
                       </div>
-                    ))}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )
+                        }
+                      </>
+                    ) : (
+                      <p className="text-gray-500 text-sm">No members added to this project yet.</p>
+                    )}
+                    <button
+                      onClick={() => {
+                        setSelectedProject(project);
+                        setShowAddPersonModal(true);
+                      }}
+                      className="mt-4 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg flex items-center gap-1 hover:bg-green-700 transition-colors"
+                    >
+                      <UserPlus size={16} /> Add Member
+                    </button>
                   </div>
-                </div>
+                )}
               </div>
-            )}
+            ))}
           </div>
-        ))}
+        )}
       </div>
 
       {/* Add Project Modal */}
       {showAddProjectModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
@@ -574,7 +553,7 @@ function Projects() {
 
       {/* Add Person Modal */}
       {showAddPersonModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
@@ -687,33 +666,33 @@ function Projects() {
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="p-6">
-              <div className="flex items-center justify-center mb-4">
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-red-600" />
-                </div>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-800">Confirm Deletion</h3>
+                <button
+                  onClick={() => setShowDeleteConfirmModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
               </div>
-              <h3 className="text-xl font-semibold text-gray-800 text-center mb-2">Delete Project</h3>
-              <p className="text-gray-600 text-center mb-6">
-                Are you sure you want to delete this project? This action cannot be undone.
-              </p>
+              <p className="text-gray-700 mb-6">Are you sure you want to delete this project? This action cannot be undone.</p>
               <div className="flex justify-end space-x-3">
                 <button
-                  onClick={() => {
-                    setShowDeleteConfirmModal(false);
-                    setProjectToDelete(null);
-                  }}
+                  type="button"
+                  onClick={() => setShowDeleteConfirmModal(false)}
                   className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
+                  type="submit"
                   onClick={handleDeleteConfirm}
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                 >
-                  Delete Project
+                  Delete
                 </button>
               </div>
             </div>
@@ -721,9 +700,96 @@ function Projects() {
         </div>
       )}
 
-      {showProjectDetailsModal && renderProjectDetailsModal()}
-      {showEditMemberModal && renderEditMemberModal()}
+      {/* Edit Member Modal */}
+      {showEditMemberModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Edit Member Role</h2>
+              <button
+                onClick={() => {
+                  setShowEditMemberModal(false);
+                  setEditingMember(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleUpdateMember} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  User Type
+                </label>
+                <select
+                  value={formData.userType}
+                  onChange={(e) => setFormData({ ...formData, userType: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="client">Client</option>
+                  <option value="employee">Employee</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Role
+                </label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  {formData.userType === 'client' ? (
+                    <>
+                      <option value="client">Client</option>
+                      <option value="head">Client Head</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="employee">Employee</option>
+                      <option value="manager">Project Manager</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditMemberModal(false);
+                    setEditingMember(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 hover:text-gray-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Update Role
+                </button>
+              </div>
+            </form>
+          </div>
     </div>
+      )}
+    </>
   );
 }
 

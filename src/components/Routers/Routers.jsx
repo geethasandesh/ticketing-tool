@@ -44,13 +44,14 @@ function AdminRoute({ children }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // Check if user is admin
-        const adminQuery = query(
-          collection(db, 'admins'),
-          where('email', '==', user.email)
+        // Check if user is admin in users collection
+        const userQuery = query(
+          collection(db, 'users'),
+          where('email', '==', user.email),
+          where('role', '==', 'admin')
         );
-        const adminSnapshot = await getDocs(adminQuery);
-        setIsAdmin(!adminSnapshot.empty);
+        const userSnapshot = await getDocs(userQuery);
+        setIsAdmin(!userSnapshot.empty);
       } else {
         setIsAdmin(false);
       }
