@@ -6,7 +6,7 @@ import Admin from "../pages/Admin";
 import ClientDashboard from '../pages/ClientDashboard';
 import Login from '../pages/Login';
 import Register from '../Register';
-import { setupAdminUser } from '../../firebase/setupAdmin';
+
 import { auth, db } from '../../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { query, collection, where, getDocs } from 'firebase/firestore';
@@ -73,11 +73,6 @@ function AdminRoute({ children }) {
 }
 
 function Routers() {
-  useEffect(() => {
-    // Set up admin user when the app starts
-    setupAdminUser();
-  }, []);
-
   return (
     <Routes>
       <Route path="/" element={<Login />} />

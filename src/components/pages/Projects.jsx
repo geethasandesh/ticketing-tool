@@ -28,13 +28,13 @@ function Projects() {
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'projects'), (querySnapshot) => {
       const projectsData = querySnapshot.docs.map(doc => {
-        console.log('Processing project document:', doc.id, doc.data());
+        // console.log('Processing project document:', doc.id, doc.data()); // Commented out
         return {
-          id: doc.id,
-          ...doc.data()
+        id: doc.id,
+        ...doc.data()
         };
       });
-      console.log('Real-time projects data received (total documents):', projectsData.length, projectsData);
+      // console.log('Real-time projects data received (total documents):', projectsData.length, projectsData); // Commented out
       setProjects(projectsData);
       setLoading(false);
     }, (error) => {
@@ -256,12 +256,12 @@ function Projects() {
   };
 
   const handleDeleteMember = async (memberToDelete, projectId) => {
-    console.log('handleDeleteMember called with:', memberToDelete, 'from project:', projectId);
+    // console.log('handleDeleteMember called with:', memberToDelete, 'from project:', projectId); // Removed
     
     // Find the project from the projects array
     const project = projects.find(p => p.id === projectId);
     if (!project) {
-      console.log('Project not found');
+      // console.log('Project not found'); // Removed
       return;
     }
 
@@ -273,20 +273,20 @@ function Projects() {
         return;
       }
 
-      console.log('Removing member from project:', project.id);
+      // console.log('Removing member from project:', project.id); // Removed
       // Remove member from project
       const updatedMembers = project.members.filter(member => member.uid !== memberToDelete.uid);
-      console.log('Updated members:', updatedMembers);
+      // console.log('Updated members:', updatedMembers); // Removed
       
       await updateDoc(doc(db, 'projects', project.id), {
         members: updatedMembers
       });
-      console.log('Project updated in Firestore');
+      // console.log('Project updated in Firestore'); // Removed
 
       // Delete user document from Firestore users collection
       try {
         await deleteDoc(doc(db, 'users', memberToDelete.uid));
-        console.log('User document deleted from Firestore');
+        // console.log('User document deleted from Firestore'); // Removed
       } catch (error) {
         console.error('Error deleting user document:', error);
         // Continue even if user document doesn't exist
@@ -298,7 +298,7 @@ function Projects() {
         await updateDoc(userDocRef, {
           projects: arrayRemove(projectId) // Remove project from user's projects array
         });
-        console.log('Project removed from user document in Firestore');
+        // console.log('Project removed from user document in Firestore'); // Removed
       } catch (error) {
         console.error('Error removing project from user document:', error);
         // Continue even if the user document or projects array doesn't exist
@@ -311,14 +311,14 @@ function Projects() {
           : p
       );
       setProjects(updatedProjects);
-      console.log('Local state updated');
+      // console.log('Local state updated'); // Removed
       
       // Update selected project if it's the same project
       if (selectedProject && selectedProject.id === project.id) {
         const newlySelectedProject = updatedProjects.find(p => p.id === project.id);
         if (newlySelectedProject) {
           setSelectedProject(newlySelectedProject);
-          console.log('Selected project updated');
+          // console.log('Selected project updated'); // Removed
         }
       }
       

@@ -516,30 +516,30 @@ function ClientDashboard() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 md:px-6 py-3 md:py-4 space-y-3 sm:space-y-0">
             <div className="flex items-center space-x-4">
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                <Menu className="w-6 h-6 text-gray-600" />
+                <Menu className="w-5 h-5 md:w-6 md:h-6 text-gray-600" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Welcome back, {clientName}!</h1>
-                <p className="text-gray-600">Manage your support tickets and communications</p>
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900">Welcome back, {clientName}!</h1>
+                <p className="text-sm md:text-base text-gray-600">Manage your support tickets and communications</p>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3 md:space-x-4">
               <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors relative">
-                <Bell className="w-6 h-6 text-gray-600" />
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
+                <Bell className="w-5 h-5 md:w-6 md:h-6 text-gray-600" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 md:w-3 md:h-3 bg-red-500 rounded-full"></span>
               </button>
               <button
                 onClick={handleLogout}
-                className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
+                className="flex items-center space-x-2 px-3 md:px-4 py-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
               >
-                <LogOut className="w-4 h-4" />
-                <span className="font-medium">Sign Out</span>
+                <LogOut className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="font-medium text-sm md:text-base">Sign Out</span>
               </button>
             </div>
           </div>
@@ -550,63 +550,63 @@ function ClientDashboard() {
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
               {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Total Tickets</p>
-                      <p className="text-2xl font-bold text-gray-900">{tickets.length}</p>
+                      <p className="text-2xl md:text-3xl font-bold text-gray-900">{tickets.length}</p>
                     </div>
-                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                      <FileText className="w-6 h-6 text-blue-600" />
+                    <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <FileText className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
                     </div>
                   </div>
                 </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Open Tickets</p>
-                      <p className="text-2xl font-bold text-blue-600">{tickets.filter(t => t.status === 'Open').length}</p>
+                      <p className="text-2xl md:text-3xl font-bold text-blue-600">{tickets.filter(t => t.status === 'Open').length}</p>
                     </div>
-                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                      <AlertCircle className="w-6 h-6 text-blue-600" />
+                    <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <AlertCircle className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
                     </div>
                   </div>
                 </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">In Progress</p>
-                      <p className="text-2xl font-bold text-amber-600">{tickets.filter(t => t.status === 'In Progress').length}</p>
+                      <p className="text-2xl md:text-3xl font-bold text-amber-600">{tickets.filter(t => t.status === 'In Progress').length}</p>
                     </div>
-                    <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-                      <Clock className="w-6 h-6 text-amber-600" />
+                    <div className="w-10 h-10 md:w-12 md:h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                      <Clock className="w-5 h-5 md:w-6 md:h-6 text-amber-600" />
                     </div>
                   </div>
                 </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Resolved</p>
-                      <p className="text-2xl font-bold text-emerald-600">{tickets.filter(t => t.status === 'Resolved').length}</p>
+                      <p className="text-2xl md:text-3xl font-bold text-emerald-600">{tickets.filter(t => t.status === 'Resolved').length}</p>
                     </div>
-                    <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-                      <CheckCircle className="w-6 h-6 text-emerald-600" />
+                    <div className="w-10 h-10 md:w-12 md:h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                      <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-emerald-600" />
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Quick Actions */}
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+              <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 mt-4 md:mt-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <button
                     onClick={() => navigate('/ticketing')}
-                    className="flex items-center space-x-3 p-4 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all duration-200"
+                    className="flex items-center space-x-3 p-3 md:p-4 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all duration-200"
                   >
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      {/* Removed Plus icon */}
+                    <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Plus className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
                     </div>
                     <div className="text-left">
                       <p className="font-medium text-gray-900">Create New Ticket</p>
@@ -615,10 +615,10 @@ function ClientDashboard() {
                   </button>
                   <button
                     onClick={() => setActiveTab('tickets')}
-                    className="flex items-center space-x-3 p-4 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all duration-200"
+                    className="flex items-center space-x-3 p-3 md:p-4 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all duration-200"
                   >
-                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-green-600" />
+                    <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <FileText className="w-4 h-4 md:w-5 md:h-5 text-green-600" />
                     </div>
                     <div className="text-left">
                       <p className="font-medium text-gray-900">View My Tickets</p>
@@ -701,10 +701,10 @@ function ClientDashboard() {
                 </button>
               </div>
 
-              {/* Filters Section - Moved and styled as a standalone card */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+              {/* Filters Section */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Filter Tickets</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                   <div className="relative">
                     <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
                     <input
@@ -769,16 +769,16 @@ function ClientDashboard() {
                     />
                   </div>
                 </div>
-                <div className="mt-6 flex justify-end space-x-4">
+                <div className="mt-4 md:mt-6 flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4">
                   <button
                     onClick={clearFilters}
-                    className="px-6 py-2.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-all duration-200 font-medium"
+                    className="w-full sm:w-auto px-6 py-2.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-all duration-200 font-medium"
                   >
                     Clear Filters
                   </button>
                   <button
                     onClick={handleSearch}
-                    className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2.5 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl"
+                    className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2.5 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center justify-center space-x-2 font-medium shadow-lg hover:shadow-xl"
                   >
                     <Search className="w-5 h-5" />
                     <span>Search Tickets</span>
@@ -786,11 +786,10 @@ function ClientDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-12 gap-8">
-                {/* Ticket List / Filters */}
-                <div className="col-span-12 lg:col-span-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-8 mt-4 md:mt-6">
+                {/* Ticket List */}
+                <div className="lg:col-span-6">
                   <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                    {/* Ticket Table / Placeholder */}
                     <div className="max-h-[calc(100vh-24rem)] overflow-y-auto">
                       {hasSearched ? (
                         filteredTickets.length === 0 ? (
@@ -869,7 +868,7 @@ function ClientDashboard() {
                 </div>
 
                 {/* Ticket Details */}
-                <div className="col-span-12 lg:col-span-6">
+                <div className="lg:col-span-6">
                   {selectedTicket ? (
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden h-[calc(100vh-12rem)] flex flex-col">
                       {/* Ticket Header */}

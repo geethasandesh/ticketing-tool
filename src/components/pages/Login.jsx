@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "firebase/auth";
+import { getFirestore, collection, query, where, getDocs, updateDoc, deleteField } from "firebase/firestore";
 import artihcusLogo from '../../assets/artihcus-logo1.svg';
  
 const Login = () => {
@@ -29,23 +29,55 @@ const Login = () => {
     }
  
     try {
-      // 🔐 Sign in using Firebase Auth
-      await signInWithEmailAndPassword(auth, email, password);
-      
-      // 🔍 Get user data from Firestore
-      const userDoc = await getDocs(query(collection(db, "users"), where("email", "==", email)));
-      
-      if (userDoc.empty) {
-        setError("User data not found");
+      let userData;
+      let userDocRef;
+ 
+      // 1. Check for existing user in Firestore
+      const usersQuery = query(collection(db, "users"), where("email", "==", email));
+      const userSnapshot = await getDocs(usersQuery);
+ 
+      if (!userSnapshot.empty) {
+        userData = userSnapshot.docs[0].data();
+        userDocRef = userSnapshot.docs[0].ref;
+ 
+        // Check if user already has an auth account
+        const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+        
+        if (userData.status === 'pending' && userData.password && signInMethods.length === 0) {
+          // Only create auth account if user doesn't already have one
+          try {
+            await createUserWithEmailAndPassword(auth, email, userData.password);
+          } catch (authError) {
+            if (authError.code === 'auth/email-already-in-use') {
+              // If email is already in use, proceed to sign in
+              console.log('Auth account already exists, proceeding to sign in');
+            } else {
+              console.error('Error creating Auth account for pending user:', authError);
+              setError("Failed to activate account. Please try again.");
+              return;
+            }
+          }
+        }
+      } else {
+        setError("Invalid email or password");
         return;
       }
-
-      const userData = userDoc.docs[0].data();
+ 
+      // 2. Sign in the user
+      await signInWithEmailAndPassword(auth, email, password);
+     
+      // 3. Update user status in Firestore to 'active' and remove password if pending
+      if (userData.status === 'pending' && userDocRef) {
+        await updateDoc(userDocRef, {
+          status: 'active',
+          password: deleteField() // Remove the temporary password field
+        });
+      }
  
       // 💾 Save login state and user data
       localStorage.setItem("isLoggedIn", "true");
       localStorage.setItem("userRole", userData.role);
-      localStorage.setItem("userId", userDoc.docs[0].id);
+      localStorage.setItem("userId", userSnapshot.docs[0].id);
       localStorage.setItem("userInfo", JSON.stringify({
         name: `${userData.firstName} ${userData.lastName}`,
         empId: userData.empId,
@@ -71,7 +103,11 @@ const Login = () => {
  
     } catch (err) {
       console.error("Login error:", err);
-      setError("Invalid email or password");
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        setError("Invalid email or password");
+      } else {
+        setError("An unexpected error occurred. Please try again.");
+      }
     }
   };
  
@@ -236,3 +272,4 @@ const Login = () => {
 };
  
 export default Login;
+ 
