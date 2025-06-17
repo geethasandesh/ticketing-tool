@@ -19,7 +19,19 @@ import {
   RefreshCw,
   Calendar,
   Tag,
-  ChevronRight
+  ChevronRight,
+  LogOut,
+  Home,
+  FileText,
+  Settings,
+  Bell,
+  Menu,
+  X,
+  ChevronsLeft,
+  ChevronsRight,
+  Flag,
+  Edit,
+  ChevronLeft
 } from 'lucide-react';
 import { collection, query, onSnapshot, doc, updateDoc, serverTimestamp, where } from 'firebase/firestore';
 import { db } from '../../firebase/config';
@@ -34,6 +46,15 @@ function ClientDashboard() {
   const [filterStatus, setFilterStatus] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [clientName, setClientName] = useState('');
+  const [requesterNameFilter, setRequesterNameFilter] = useState('');
+  const [technicianFilter, setTechnicianFilter] = useState('');
+  const [dueDateFilter, setDueDateFilter] = useState('');
+  const [createdDateFilter, setCreatedDateFilter] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const navigate = useNavigate();
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -111,6 +132,11 @@ function ClientDashboard() {
         setIsLoading(false);
         return;
       }
+
+      // Set client name from email
+      const email = auth.currentUser.email;
+      const name = email.split('@')[0];
+      setClientName(name.charAt(0).toUpperCase() + name.slice(1));
 
       // Query tickets for the current user
       const q = query(
@@ -199,6 +225,15 @@ function ClientDashboard() {
       }
     };
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   const sendResponse = async (ticketId, message) => {
     if (!message.trim()) return;
@@ -298,12 +333,82 @@ function ClientDashboard() {
     }
   };
 
+  // New function to format date and time for table display
+  const formatTableDateTime = (timestamp) => {
+    if (!timestamp) return '-';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
   const filteredTickets = tickets.filter(ticket => {
     const matchesSearch = ticket.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          ticket.ticketNumber.toLowerCase().includes(searchTerm.toLowerCase());
-    if (filterStatus === 'All') return matchesSearch;
-    return matchesSearch && ticket.status === filterStatus;
+    const matchesRequester = requesterNameFilter === '' || ticket.customer.toLowerCase().includes(requesterNameFilter.toLowerCase());
+    const matchesTechnician = technicianFilter === '' || (ticket.adminResponses.length > 0 && ticket.adminResponses[0].message.toLowerCase().includes(technicianFilter.toLowerCase())); // This is a placeholder, will need proper technician field
+    const matchesDueDate = dueDateFilter === '' || (ticket.dueDate && new Date(ticket.dueDate).toDateString() === new Date(dueDateFilter).toDateString());
+    const matchesCreatedDate = createdDateFilter === '' || (ticket.created && new Date(ticket.created.toDate()).toDateString() === new Date(createdDateFilter).toDateString());
+
+    if (filterStatus === 'All') {
+      return matchesSearch && matchesRequester && matchesTechnician && matchesDueDate && matchesCreatedDate;
+    }
+    return matchesSearch && matchesRequester && matchesTechnician && matchesDueDate && matchesCreatedDate && ticket.status === filterStatus;
   });
+
+  const handleSearch = () => {
+    setHasSearched(true);
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterStatus('All');
+    setRequesterNameFilter('');
+    setTechnicianFilter('');
+    setDueDateFilter('');
+    setCreatedDateFilter('');
+    setHasSearched(false);
+  };
+
+  const sidebarItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: Home, active: activeTab === 'dashboard' },
+    { id: 'tickets', label: 'My Tickets', icon: FileText, active: activeTab === 'tickets' },
+    { id: 'create', label: 'Create Ticket', icon: Plus, active: activeTab === 'create' },
+    { id: 'notifications', label: 'Notifications', icon: Bell, active: activeTab === 'notifications' },
+    { id: 'settings', label: 'Settings', icon: Settings, active: activeTab === 'settings' }
+  ];
+
+  const renderSidebarItem = (item) => {
+    const IconComponent = item.icon;
+    return (
+      <button
+        key={item.id}
+        onClick={() => {
+          setActiveTab(item.id);
+          if (item.id === 'create') {
+            navigate('/ticketing');
+          }
+          setSidebarOpen(false);
+        }}
+        className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-4 py-3 rounded-xl transition-all duration-200 font-medium ${
+          item.active
+            ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg'
+            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+        }`}
+        title={sidebarCollapsed ? item.label : ''}
+      >
+        <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : ''}`}>
+          <IconComponent className={`w-5 h-5 ${item.active ? 'text-white' : 'text-gray-600'}`} />
+        </div>
+        {!sidebarCollapsed && <span>{item.label}</span>}
+      </button>
+    );
+  };
 
   if (error) {
     return (
@@ -333,7 +438,7 @@ function ClientDashboard() {
           <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">Loading Tickets</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">Loading Dashboard</h2>
           <p className="text-gray-600 leading-relaxed">Please wait while we connect to the server...</p>
         </div>
       </div>
@@ -341,49 +446,273 @@ function ClientDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow-lg border-b border-gray-200 backdrop-blur-sm bg-white/95">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg">
-                <MessageSquare className="w-7 h-7 text-white" />
+    <div className="flex h-screen bg-gray-50">
+      {/* Mobile Sidebar Overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`fixed inset-y-0 left-0 z-50 transform transition-all duration-300 ease-in-out ${ sidebarCollapsed ? 'w-20' : 'w-64' } bg-white shadow-xl lg:translate-x-0 lg:static ${ sidebarOpen ? 'translate-x-0' : '-translate-x-full' }`}>
+        <div className="flex flex-col h-full">
+          {/* Sidebar Header */}
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+            {!sidebarCollapsed && (
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl flex items-center justify-center">
+                  <MessageSquare className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900">Support Hub</h1>
+                  <p className="text-sm text-gray-500">Client Portal</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Support Center</h1>
-                <p className="text-gray-600 mt-1">Manage your support tickets and communications</p>
-              </div>
-            </div>
+            )}
             <button
-              onClick={() => navigate('/ticketing')}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
             >
-              <Plus className="w-5 h-5" />
-              <span>Create Ticket</span>
+              {sidebarCollapsed ? (
+                <ChevronsRight className="w-6 h-6" />
+              ) : (
+                <ChevronsLeft className="w-6 h-6" />
+              )}
+            </button>
+          </div>
+
+          {/* Sidebar Navigation */}
+          <nav className="flex-1 p-6 space-y-2">
+            {sidebarItems.map(renderSidebarItem)}
+          </nav>
+
+          {/* Sidebar Footer */}
+          <div className="p-6 border-t border-gray-200">
+            {!sidebarCollapsed && (
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center">
+                  <User className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{clientName}</p>
+                  <p className="text-xs text-gray-500">Client</p>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={handleLogout}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-start'} space-x-2 px-4 py-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200`}
+            >
+              <LogOut className="w-4 h-4" />
+              {!sidebarCollapsed && <span className="text-sm font-medium">Sign Out</span>}
             </button>
           </div>
         </div>
-      </div>
+      </aside>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-12 gap-8">
-          {/* Ticket List */}
-          <div className="col-span-12 lg:col-span-5">
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-              {/* Search and Filter Header */}
-              <div className="p-6 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Tickets</h3>
-                <div className="space-y-4">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <header className="bg-white shadow-sm border-b border-gray-200">
+          <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <Menu className="w-6 h-6 text-gray-600" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Welcome back, {clientName}!</h1>
+                <p className="text-gray-600">Manage your support tickets and communications</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors relative">
+                <Bell className="w-6 h-6 text-gray-600" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="font-medium">Sign Out</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Dashboard Content */}
+        <main className="flex-1 overflow-auto p-6">
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Tickets</p>
+                      <p className="text-2xl font-bold text-gray-900">{tickets.length}</p>
+                    </div>
+                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <FileText className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Open Tickets</p>
+                      <p className="text-2xl font-bold text-blue-600">{tickets.filter(t => t.status === 'Open').length}</p>
+                    </div>
+                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">In Progress</p>
+                      <p className="text-2xl font-bold text-amber-600">{tickets.filter(t => t.status === 'In Progress').length}</p>
+                    </div>
+                    <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                      <Clock className="w-6 h-6 text-amber-600" />
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Resolved</p>
+                      <p className="text-2xl font-bold text-emerald-600">{tickets.filter(t => t.status === 'Resolved').length}</p>
+                    </div>
+                    <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                      <CheckCircle className="w-6 h-6 text-emerald-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button
+                    onClick={() => navigate('/ticketing')}
+                    className="flex items-center space-x-3 p-4 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all duration-200"
+                  >
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      {/* Removed Plus icon */}
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Create New Ticket</p>
+                      <p className="text-sm text-gray-500">Submit a new support request</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('tickets')}
+                    className="flex items-center space-x-3 p-4 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all duration-200"
+                  >
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <FileText className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">View My Tickets</p>
+                      <p className="text-sm text-gray-500">Check status of existing tickets</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'tickets' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between py-4">
+                {/* Left side: SAP EWM and Filter */}
+                <div className="flex items-center space-x-4">
+                  {/* SAP EWM Dropdown (Placeholder) */}
+                  <div className="relative">
+                    <button className="flex items-center space-x-2 px-4 py-2 bg-gray-100 rounded-lg text-gray-800 hover:bg-gray-200 transition-colors">
+                      <span className="font-semibold">SAP EWM</span>
+                      <ChevronDown className="w-4 h-4 text-gray-600" />
+                    </button>
+                    {/* Dropdown content would go here */}
+                  </div>
+                  {/* Filter Icon */}
+                  <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    <Filter className="w-5 h-5 text-gray-600" />
+                  </button>
+                </div>
+
+                {/* Right side: Last 30 days and View Options */}
+                <div className="flex items-center space-x-4">
+                  {/* Last 30 days Dropdown (Placeholder) */}
+                  <div className="relative">
+                    <button className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm">
+                      <Clock className="w-4 h-4 text-gray-500" />
+                      <span>Last 30 days</span>
+                      <ChevronDown className="w-4 h-4 text-gray-500" />
+                    </button>
+                    {/* Dropdown content would go here */}
+                  </div>
+                  {/* View Options (Placeholder for grid/list icons) */}
+                  <div className="flex space-x-2">
+                    <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-300">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-gray-600"><path d="M3 3h7v7H3V3zm0 11h7v7H3v-7zm11-11h7v7h-7V3zm0 11h7v7h-7v-7z"/></svg>
+                    </button>
+                    <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-gray-600"><path d="M4 7h16v2H4zm0 4h16v2H4zm0 4h16v2H4z"/></svg>
+                    </button>
+                    <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-gray-600"><path d="M4 7h16v2H4zm0 4h16v2H4zm0 4h10v2H4z"/></svg>
+                    </button>
+                  </div>
+                  {/* Pagination Controls */}
+                  <div className="flex items-center space-x-2 text-gray-600 text-sm">
+                    <span>1-7 of 7</span>
+                    <button className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2 mb-4">
+                <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Search className="w-4 h-4" />
+                  <span>New Incident</span>
+                </button>
+                <button className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">Edit</button>
+                <button className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">Delete</button>
+                <button className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">Pick Up</button>
+                <button className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">Close</button>
+                <button className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">Merge</button>
+                <button className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">Link Requests</button>
+                <button className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                  <span>Assign</span>
+                </button>
+              </div>
+
+              {/* Filters Section - Moved and styled as a standalone card */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Filter Tickets</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                   <div className="relative">
                     <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="Search tickets..."
+                      placeholder="Search subject or ID..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white"
+                      className="w-full pl-10 pr-4 py-2.5 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 text-gray-800 placeholder-gray-500 shadow-sm"
                     />
                   </div>
                   <div className="relative">
@@ -391,9 +720,9 @@ function ClientDashboard() {
                     <select
                       value={filterStatus}
                       onChange={(e) => setFilterStatus(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white appearance-none"
+                      className="w-full pl-10 pr-4 py-2.5 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 text-gray-800 appearance-none shadow-sm"
                     >
-                      <option value="All">All Tickets</option>
+                      <option value="All">All Statuses</option>
                       <option value="Open">Open</option>
                       <option value="In Progress">In Progress</option>
                       <option value="Resolved">Resolved</option>
@@ -401,214 +730,312 @@ function ClientDashboard() {
                     </select>
                     <ChevronDown className="w-5 h-5 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none" />
                   </div>
+                  <div className="relative">
+                    <User className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Requester Name..."
+                      value={requesterNameFilter}
+                      onChange={(e) => setRequesterNameFilter(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 text-gray-800 placeholder-gray-500 shadow-sm"
+                    />
+                  </div>
+                  <div className="relative">
+                    <User className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Technician Name..."
+                      value={technicianFilter}
+                      onChange={(e) => setTechnicianFilter(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 text-gray-800 placeholder-gray-500 shadow-sm"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Calendar className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                    <input
+                      type="date"
+                      value={dueDateFilter}
+                      onChange={(e) => setDueDateFilter(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 text-gray-800 placeholder-gray-500 shadow-sm"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Calendar className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                    <input
+                      type="date"
+                      value={createdDateFilter}
+                      onChange={(e) => setCreatedDateFilter(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 text-gray-800 placeholder-gray-500 shadow-sm"
+                    />
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-end space-x-4">
+                  <button
+                    onClick={clearFilters}
+                    className="px-6 py-2.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-all duration-200 font-medium"
+                  >
+                    Clear Filters
+                  </button>
+                  <button
+                    onClick={handleSearch}
+                    className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2.5 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl"
+                  >
+                    <Search className="w-5 h-5" />
+                    <span>Search Tickets</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Ticket List */}
-              <div className="divide-y divide-gray-100 max-h-[calc(100vh-20rem)] overflow-y-auto">
-                {filteredTickets.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <Mail className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-500 font-medium">No tickets found</p>
-                    <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filter criteria</p>
-                  </div>
-                ) : (
-                  filteredTickets.map(ticket => (
-                    <div
-                      key={ticket.id}
-                      className={`p-6 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 cursor-pointer transition-all duration-200 ${
-                        selectedTicket?.id === ticket.id ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-r-4 border-blue-500' : ''
-                      }`}
-                      onClick={() => setSelectedTicket(ticket)}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-3 mb-2">
-                            <h3 className="font-semibold text-gray-900 truncate text-lg">{ticket.subject}</h3>
-                            <span className={getStatusBadge(ticket.status)}>{ticket.status}</span>
+              <div className="grid grid-cols-12 gap-8">
+                {/* Ticket List / Filters */}
+                <div className="col-span-12 lg:col-span-6">
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    {/* Ticket Table / Placeholder */}
+                    <div className="max-h-[calc(100vh-24rem)] overflow-y-auto">
+                      {hasSearched ? (
+                        filteredTickets.length === 0 ? (
+                          <div className="p-8 text-center">
+                            <Mail className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                            <p className="text-gray-500 font-medium">No tickets found with the applied filters.</p>
+                            <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filter criteria.</p>
                           </div>
-                          <p className="text-gray-600 text-sm line-clamp-2 mb-3">{ticket.description}</p>
-                          <div className="flex items-center space-x-4 text-sm text-gray-500">
-                            <div className="flex items-center space-x-1">
+                        ) : (
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th scope="col" className="px-6 py-3 text-left"><input type="checkbox" className="form-checkbox h-4 w-4 text-blue-600 transition duration-150 ease-in-out" /></th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requester Name</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Technician</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created Date</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
+                                <th scope="col" className="relative px-6 py-3"></th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {filteredTickets.map(ticket => (
+                                <tr key={ticket.id} className="hover:bg-gray-50">
+                                  <td className="px-6 py-4 whitespace-nowrap flex items-center space-x-2">
+                                    <input type="checkbox" className="form-checkbox h-4 w-4 text-blue-600 transition duration-150 ease-in-out" />
+                                    <Edit className="w-4 h-4 text-gray-400" />
+                                    <Mail className="w-4 h-4 text-gray-400" />
+                                    <FileText className="w-4 h-4 text-gray-400" />
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 flex items-center space-x-2">
+                                    {/* Conditionally render Paperclip icon */}
+                                    {ticket.hasAttachments && <Paperclip className="w-4 h-4 text-gray-400" />}
+                                    <span>{ticket.ticketNumber}</span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 truncate max-w-xs flex items-center space-x-2">
+                                    <Mail className="w-4 h-4 text-gray-400" />
+                                    <span>{ticket.subject}</span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 flex items-center space-x-2">
+                                    <User className="w-4 h-4 text-gray-400" />
+                                    <span>{ticket.customer}</span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 flex items-center space-x-2">
+                                    <span className={`w-2 h-2 rounded-full ${ticket.adminResponses.length > 0 ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                                    <span>{ticket.adminResponses.length > 0 ? 'Nikihleswar Red...' : 'Mohamed Suhail'}</span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 flex items-center space-x-2">
+                                    {ticket.status === 'In Progress' && <Flag className="w-4 h-4 text-amber-500" />}
+                                    <span className={`w-2 h-2 rounded-full ${ticket.status === 'Open' ? 'bg-blue-500' : ticket.status === 'In Progress' ? 'bg-amber-500' : ticket.status === 'Resolved' ? 'bg-emerald-500' : 'bg-gray-500'}`}></span>
+                                    <span>{ticket.status}</span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTableDateTime(ticket.dueDate)}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTableDateTime(ticket.created)}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ticket.customer === 'Unknown' ? 'System' : ticket.customer}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    {/* No actions needed for this column as per image */}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )
+                      ) : (
+                        <div className="p-8 text-center">
+                          <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                          <p className="text-gray-500 font-medium">Use the filters above to search for tickets.</p>
+                          <p className="text-gray-400 text-sm mt-1">Your tickets will appear here after you click "Search Tickets".</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ticket Details */}
+                <div className="col-span-12 lg:col-span-6">
+                  {selectedTicket ? (
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden h-[calc(100vh-12rem)] flex flex-col">
+                      {/* Ticket Header */}
+                      <div className="p-6 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 flex-shrink-0">
+                        <div className="text-center">
+                          <h2 className="text-2xl font-bold text-gray-900 mb-2">{selectedTicket.subject}</h2>
+                          <div className="flex items-center justify-center space-x-4 text-sm text-gray-600">
+                            <span className="flex items-center space-x-1">
                               <Calendar className="w-4 h-4" />
-                              <span>{formatMessageTime(ticket.created)}</span>
-                            </div>
-                            <div className="flex items-center space-x-1">
+                              <span>Created {formatMessageTime(selectedTicket.created)}</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
                               <Tag className="w-4 h-4" />
-                              <span>{ticket.project}</span>
-                            </div>
+                              <span>{selectedTicket.project}</span>
+                            </span>
+                            <span className={getStatusBadge(selectedTicket.status)}>{selectedTicket.status}</span>
                           </div>
                         </div>
-                        <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0 ml-2" />
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
 
-          {/* Ticket Details */}
-          <div className="col-span-12 lg:col-span-7">
-            {selectedTicket ? (
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden h-[calc(100vh-12rem)] flex flex-col">
-                {/* Ticket Header */}
-                <div className="p-6 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 flex-shrink-0">
-                  <div className="text-center">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">{selectedTicket.subject}</h2>
-                    <div className="flex items-center justify-center space-x-4 text-sm text-gray-600">
-                      <span className="flex items-center space-x-1">
-                        <Calendar className="w-4 h-4" />
-                        <span>Created {formatMessageTime(selectedTicket.created)}</span>
-                      </span>
-                      <span className="flex items-center space-x-1">
-                        <Tag className="w-4 h-4" />
-                        <span>{selectedTicket.project}</span>
-                      </span>
-                      <span className={getStatusBadge(selectedTicket.status)}>{selectedTicket.status}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Communication Thread */}
-                <div className="flex-1 flex flex-col min-h-0">
-                  {/* <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50 flex-shrink-0">
-                    <h3 className="text-lg font-semibold text-gray-900 text-center">Communication Thread</h3>
-                  </div> */}
-                  
-                  <div 
-                    ref={messagesContainerRef}
-                    className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-gray-50/50 to-white"
-                    style={{ 
-                      scrollBehavior: 'smooth',
-                      maxHeight: 'calc(100vh - 32rem)' 
-                    }}
-                  >
-                    {(() => {
-                      const allMessages = [
-                        {
-                          type: 'customer',
-                          message: selectedTicket.description,
-                          timestamp: selectedTicket.created,
-                          isInitial: true
-                        },
-                        ...(selectedTicket.adminResponses || []).map(response => ({
-                          type: 'admin',
-                          message: response.message,
-                          timestamp: response.timestamp
-                        })),
-                        ...(selectedTicket.customerResponses || []).map(response => ({
-                          type: 'customer',
-                          message: response.message,
-                          timestamp: response.timestamp
-                        }))
-                      ].sort((a, b) => {
-                        const timeA = a.timestamp?.toDate?.() || new Date(a.timestamp);
-                        const timeB = b.timestamp?.toDate?.() || new Date(b.timestamp);
-                        return timeA - timeB;
-                      });
-
-                      return allMessages.map((msg, index) => (
+                      {/* Communication Thread */}
+                      <div className="flex-1 flex flex-col min-h-0">
                         <div 
-                          key={index} 
-                          className={`flex ${msg.type === 'customer' ? 'justify-end' : 'justify-start'} mb-4`}
+                          ref={messagesContainerRef}
+                          className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-gray-50/50 to-white"
+                          style={{ 
+                            scrollBehavior: 'smooth',
+                            maxHeight: 'calc(100vh - 32rem)' 
+                          }}
                         >
-                          <div className={`max-w-[75%] ${msg.type === 'customer' ? 'order-2' : 'order-1'}`}>
-                            <div className={`rounded-2xl px-4 py-3 shadow-lg ${
-                              msg.type === 'customer' 
-                                ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white' 
-                                : 'bg-white border border-gray-200 text-gray-800'
-                            }`}>
-                              <div className="flex items-center justify-between mb-2">
-                                <span className={`text-xs font-semibold ${
-                                  msg.type === 'customer' ? 'text-blue-100' : 'text-gray-500'
-                                }`}>
-                                  {msg.type === 'customer' 
-                                    ? (msg.isInitial ? 'Initial Request' : 'Your Response')
-                                    : 'Support Team'
-                                  }
-                                </span>
-                                <span className={`text-xs ${
-                                  msg.type === 'customer' ? 'text-blue-100' : 'text-gray-400'
-                                }`}>
-                                  {formatMessageTime(msg.timestamp)}
-                                </span>
+                          {(() => {
+                            const allMessages = [
+                              {
+                                type: 'customer',
+                                message: selectedTicket.description,
+                                timestamp: selectedTicket.created,
+                                isInitial: true
+                              },
+                              ...(selectedTicket.adminResponses || []).map(response => ({
+                                type: 'admin',
+                                message: response.message,
+                                timestamp: response.timestamp
+                              })),
+                              ...(selectedTicket.customerResponses || []).map(response => ({
+                                type: 'customer',
+                                message: response.message,
+                                timestamp: response.timestamp
+                              }))
+                            ].sort((a, b) => {
+                              const timeA = a.timestamp?.toDate?.() || new Date(a.timestamp);
+                              const timeB = b.timestamp?.toDate?.() || new Date(b.timestamp);
+                              return timeA - timeB;
+                            });
+
+                            return allMessages.map((msg, index) => (
+                              <div 
+                                key={index} 
+                                className={`flex ${msg.type === 'customer' ? 'justify-end' : 'justify-start'} mb-4`}
+                              >
+                                <div className={`max-w-[75%] ${msg.type === 'customer' ? 'order-2' : 'order-1'}`}>
+                                  <div className={`rounded-2xl px-4 py-3 shadow-lg ${
+                                    msg.type === 'customer' 
+                                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white' 
+                                      : 'bg-white border border-gray-200 text-gray-800'
+                                  }`}>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className={`text-xs font-semibold ${
+                                        msg.type === 'customer' ? 'text-blue-100' : 'text-gray-500'
+                                      }`}>
+                                        {msg.type === 'customer' 
+                                          ? (msg.isInitial ? 'Initial Request' : 'Your Response')
+                                          : 'Support Team'
+                                        }
+                                      </span>
+                                      <span className={`text-xs ${
+                                        msg.type === 'customer' ? 'text-blue-100' : 'text-gray-400'
+                                      }`}>
+                                        {formatMessageTime(msg.timestamp)}
+                                      </span>
+                                    </div>
+                                    <p className={`text-sm leading-relaxed ${
+                                      msg.type === 'customer' ? 'text-white' : 'text-gray-700'
+                                    }`}>
+                                      {msg.message}
+                                    </p>
+                                  </div>
+                                </div>
+                                {msg.type === 'customer' ? (
+                                  <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center ml-3 order-1 flex-shrink-0">
+                                    <User className="w-4 h-4 text-white" />
+                                  </div>
+                                ) : (
+                                  <div className="w-8 h-8 bg-gradient-to-r from-gray-600 to-gray-700 rounded-full flex items-center justify-center mr-3 order-2 flex-shrink-0">
+                                    <MessageSquare className="w-4 h-4 text-white" />
+                                  </div>
+                                )}
                               </div>
-                              <p className={`text-sm leading-relaxed ${
-                                msg.type === 'customer' ? 'text-white' : 'text-gray-700'
-                              }`}>
-                                {msg.message}
-                              </p>
-                            </div>
-                          </div>
-                          {msg.type === 'customer' ? (
-                            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center ml-3 order-1 flex-shrink-0">
-                              <User className="w-4 h-4 text-white" />
-                            </div>
-                          ) : (
-                            <div className="w-8 h-8 bg-gradient-to-r from-gray-600 to-gray-700 rounded-full flex items-center justify-center mr-3 order-2 flex-shrink-0">
-                              <MessageSquare className="w-4 h-4 text-white" />
+                            ));
+                          })()}
+                          <div ref={messagesEndRef} />
+                        </div>
+                      </div>
+
+                      {/* Response Input */}
+                      <div className="p-6 border-t border-gray-200 bg-white flex-shrink-0">
+                        <div className="space-y-4">
+                          <textarea
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
+                            rows="3"
+                            placeholder="Type your response here..."
+                            value={newResponse}
+                            onChange={(e) => setNewResponse(e.target.value)}
+                            disabled={isSending}
+                          />
+                          {error && (
+                            <div className="flex items-center space-x-2 text-red-600 text-sm bg-red-50 p-3 rounded-lg">
+                              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                              <span>{error}</span>
                             </div>
                           )}
+                          <button
+                            onClick={() => sendResponse(selectedTicket.id, newResponse)}
+                            disabled={isSending || !newResponse.trim()}
+                            className={`w-full py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-all duration-200 font-medium ${
+                              isSending || !newResponse.trim()
+                                ? 'bg-gray-400 cursor-not-allowed text-white'
+                                : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl'
+                            }`}
+                          >
+                            {isSending ? (
+                              <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <span>Sending...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="w-5 h-5" />
+                                <span>Send Response</span>
+                              </>
+                            )}
+                          </button>
                         </div>
-                      ));
-                    })()}
-                    <div ref={messagesEndRef} />
-                  </div>
-                </div>
-
-                {/* Response Input */}
-                <div className="p-6 border-t border-gray-200 bg-white flex-shrink-0">
-                  <div className="space-y-4">
-                    <textarea
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
-                      rows="3"
-                      placeholder="Type your response here..."
-                      value={newResponse}
-                      onChange={(e) => setNewResponse(e.target.value)}
-                      disabled={isSending}
-                    />
-                    {error && (
-                      <div className="flex items-center space-x-2 text-red-600 text-sm bg-red-50 p-3 rounded-lg">
-                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>{error}</span>
                       </div>
-                    )}
-                    <button
-                      onClick={() => sendResponse(selectedTicket.id, newResponse)}
-                      disabled={isSending || !newResponse.trim()}
-                      className={`w-full py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-all duration-200 font-medium ${
-                        isSending || !newResponse.trim()
-                          ? 'bg-gray-400 cursor-not-allowed text-white'
-                          : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl'
-                      }`}
-                    >
-                      {isSending ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          <span>Sending...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-5 h-5" />
-                          <span>Send Response</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                    </div>
+                  ) : (
+                    null
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-12 text-center h-[calc(100vh-12rem)] flex flex-col items-center justify-center">
-                <div className="w-20 h-20 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-full flex items-center justify-center mb-6">
-                  <Mail className="w-10 h-10 text-blue-600" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Select a Ticket</h3>
-                <p className="text-gray-500">Choose a ticket from the list to view details and communicate with support</p>
-              </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+
+          {activeTab === 'notifications' && (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Notifications</h2>
+              <p className="text-gray-600">No new notifications at this time.</p>
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Settings</h2>
+              <p className="text-gray-600">Settings page coming soon.</p>
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );
