@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, FolderOpen, Ticket, LogOut, Users, User, UserCheck, FolderKanban, Monitor, Bell } from 'lucide-react';
+import { Home, FolderOpen, Ticket, LogOut, Users, User, UserCheck, FolderKanban, Monitor, Bell, ChevronLeft, ChevronRight } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../firebase/config';
 import { collection, query, getDocs, where } from 'firebase/firestore';
@@ -213,16 +213,26 @@ function Admin() {
     <div className="flex min-h-screen bg-gray-100 font-sans">
       {/* Sidebar */}
       <aside
-        className={`bg-gray-800 text-white flex flex-col transition-all duration-300 ${
+        className={`bg-gray-800 text-white flex flex-col h-screen fixed transition-all duration-300 ${
           isSidebarCollapsed ? 'w-20' : 'w-64'
         }`}
       >
-        <div className="p-4 flex items-center justify-center h-16 border-b border-gray-700">
+        <div className="p-4 flex items-center justify-between h-16 border-b border-gray-700">
           <h1 className={`text-2xl font-bold ${
             isSidebarCollapsed ? 'hidden' : 'block'
           }`}>Admin Panel</h1>
+          <button
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="text-gray-500 hover:text-gray-300 p-1 rounded-md"
+          >
+            {isSidebarCollapsed ? (
+              <ChevronRight className="w-5 h-5" />
+            ) : (
+              <ChevronLeft className="w-5 h-5" />
+            )}
+          </button>
         </div>
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <button
             className={`w-full text-left flex items-center p-2 rounded-md transition-colors duration-200 ${
               activeTab === 'dashboard'
@@ -263,9 +273,9 @@ function Admin() {
             <span className={isSidebarCollapsed ? 'hidden' : 'block'}>Tickets</span>
           </button>
         </nav>
- 
-        {/* Logout button */}
-        <div className="p-4 border-t border-gray-700">
+
+        {/* Logout button - Fixed at bottom */}
+        <div className="p-4 border-t border-gray-700 mt-auto">
           <button
             onClick={handleLogout}
             className={`w-full text-left flex items-center p-2 rounded-md transition-colors duration-200 hover:bg-gray-700 hover:text-white`}
@@ -277,39 +287,35 @@ function Admin() {
           </button>
         </div>
       </aside>
- 
+
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${
+        isSidebarCollapsed ? 'ml-20' : 'ml-64'
+      }`}>
         {/* Top Header */}
-        <header className="bg-white shadow-sm h-16 flex items-center justify-between px-6 border-b">
-          <button
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            {isSidebarCollapsed ? (
-              <span className="text-xl">&#9776;</span> // Hamburger icon
-            ) : (
-              <span className="text-xl">&#x2715;</span> // X icon
-            )}
-          </button>
+        <header className="bg-white shadow-sm h-16 flex items-center justify-end px-6 border-b">
           <div className="flex items-center space-x-4">
-            <Bell className="w-6 h-6 text-gray-500" />
+            <button className="p-2 hover:bg-gray-100 rounded-full">
+              <Bell className="w-6 h-6 text-gray-500" />
+            </button>
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setShowLogoutDropdown(!showLogoutDropdown)}
                 className="flex items-center space-x-2 text-gray-700 hover:text-gray-900"
               >
-                <img
-                  src="https://via.placeholder.com/30"
-                  alt="User Avatar"
-                  className="w-8 h-8 rounded-full"
-                />
+                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <User className="w-5 h-5 text-blue-600" />
+                </div>
                 {!isSidebarCollapsed && (
                   <span className="font-medium">Admin</span>
                 )}
               </button>
               {showLogoutDropdown && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                  <div className="px-4 py-2 border-b border-gray-100">
+                    <p className="text-sm font-medium text-gray-900">Admin User</p>
+                    <p className="text-xs text-gray-500">admin@artihcus.com</p>
+                  </div>
                   <button
                     onClick={handleLogout}
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
@@ -321,7 +327,7 @@ function Admin() {
             </div>
           </div>
         </header>
- 
+
         {renderContent()}
       </main>
     </div>

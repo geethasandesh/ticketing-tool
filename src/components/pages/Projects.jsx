@@ -72,7 +72,10 @@ function Projects() {
 
   const handleAddPerson = async (e) => {
     e.preventDefault();
-    if (!selectedProject) return;
+    if (!selectedProject) {
+      console.error('No project selected when trying to add person.');
+      return;
+    }
 
     try {
       // Store current admin user
@@ -93,6 +96,11 @@ function Projects() {
         finalRole = formData.role === 'manager' ? 'project_manager' : 'employee';
       }
 
+      console.log('Attempting to add person.');
+      console.log('Selected Project at add Person:', selectedProject);
+      console.log('Selected Project Name at add Person:', selectedProject.name);
+      console.log('Form Data User Type:', formData.userType);
+
       // Check if user already exists in Firestore users collection by email
       const usersQuery = query(collection(db, 'users'), where('email', '==', formData.email));
       const userSnapshot = await getDocs(usersQuery);
@@ -101,21 +109,28 @@ function Projects() {
         // User exists, update existing document
         userRef = userSnapshot.docs[0].ref;
         memberUid = userSnapshot.docs[0].id; // Get existing UID
-        await updateDoc(userRef, {
+        const updateData = {
           role: finalRole,
           userType: formData.userType,
           updatedAt: new Date().toISOString(),
           updatedBy: currentAdmin.uid,
           projects: arrayUnion(selectedProject.id), // Add project to user's projects array
-          // If status was pending, keep it pending unless actively changing role
-          // Do not update password here as it might be temporary or admin cannot change user's password
-        });
+        };
+
+        if (formData.userType === 'client') {
+          updateData.project = selectedProject.name;
+        } else {
+          updateData.project = null; // Ensure project field is null for employees
+        }
+
+        console.log('Updating existing user document with data:', updateData);
+        await updateDoc(userRef, updateData);
         showNotification(`${formData.email} details updated and added to project.`);
       } else {
         // User does not exist, create a new pending user document
         memberUid = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         userRef = doc(db, 'users', memberUid);
-        await setDoc(userRef, {
+        const setData = {
           email: formData.email,
           role: finalRole,
           userType: formData.userType,
@@ -124,7 +139,16 @@ function Projects() {
           status: 'pending', // Indicates account needs to be created
           password: formData.password, // Store password temporarily for account creation
           projects: [selectedProject.id] // Initialize projects array with current project
-        });
+        };
+
+        if (formData.userType === 'client') {
+          setData.project = selectedProject.name;
+        } else {
+          setData.project = null; // Ensure project field is null for employees
+        }
+
+        console.log('Creating new user document with data:', setData);
+        await setDoc(userRef, setData);
         showNotification(`${formData.email} has been added to the project. Account will be created when they first log in.`);
       }
 
@@ -206,7 +230,10 @@ function Projects() {
 
   const handleUpdateMember = async (e) => {
     e.preventDefault();
-    if (!selectedProject || !editingMember) return;
+    if (!selectedProject || !editingMember) {
+      console.error('No project or member selected when trying to update member.');
+      return;
+    }
 
     try {
       const updatedMembers = selectedProject.members.map(member => {
@@ -229,6 +256,35 @@ function Projects() {
       await updateDoc(doc(db, 'projects', selectedProject.id), {
         members: updatedMembers
       });
+
+      // Update user document in users collection
+      try {
+        const userDocRef = doc(db, 'users', editingMember.uid);
+        const updateData = {
+          role: updatedMembers.find(m => m.uid === editingMember.uid)?.role || editingMember.role,
+          userType: formData.userType,
+          updatedAt: new Date().toISOString()
+        };
+
+        console.log('Attempting to update member.');
+        console.log('Selected Project at update Member:', selectedProject);
+        console.log('Selected Project Name at update Member:', selectedProject.name);
+        console.log('Form Data User Type:', formData.userType);
+        console.log('Update Data for User Document:', updateData);
+
+        // Only set the 'project' field if the user is a client
+        if (formData.userType === 'client') {
+          updateData.project = selectedProject.name; 
+        } else {
+          // If user type changes to employee, ensure 'project' field is removed or set to null
+          updateData.project = null;
+        }
+
+        await updateDoc(userDocRef, updateData);
+      } catch (error) {
+        console.error('Error updating user document:', error);
+        // Continue even if user document update fails
+      }
 
       // Update local state
       const updatedProjects = projects.map(p => 
@@ -296,7 +352,8 @@ function Projects() {
       try {
         const userDocRef = doc(db, 'users', memberToDelete.uid);
         await updateDoc(userDocRef, {
-          projects: arrayRemove(projectId) // Remove project from user's projects array
+          projects: arrayRemove(projectId), // Remove project from user's projects array
+          project: null // Clear the project field
         });
         // console.log('Project removed from user document in Firestore'); // Removed
       } catch (error) {

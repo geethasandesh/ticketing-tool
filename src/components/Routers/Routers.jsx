@@ -4,49 +4,50 @@ import Employee from '../pages/Employee';
 import Client from '../pages/Ticketing';
 import Admin from "../pages/Admin";
 import ClientDashboard from '../pages/ClientDashboard';
+import ClientTickets from '../pages/ClientTickets';
 import Login from '../pages/Login';
 import Register from '../Register';
 import AdminTickets from '../pages/AdminTickets';
 import PropTypes from 'prop-types';
  
-
+ 
 import { auth, db } from '../../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { query, collection, where, getDocs } from 'firebase/firestore';
-
+ 
 // Protected Route component
 function ProtectedRoute({ children }) {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
-
+ 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setIsAuthenticated(!!user);
       setIsLoading(false);
     });
-
+ 
     return () => unsubscribe();
   }, []);
-
+ 
   if (isLoading) {
     return <div>Loading...</div>;
   }
-
+ 
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
   }
-
+ 
   return children;
 }
 ProtectedRoute.propTypes = {
   children: PropTypes.node.isRequired,
 };
-
+ 
 // Admin Route component
 function AdminRoute({ children }) {
   const [isAdmin, setIsAdmin] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
-
+ 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -63,18 +64,18 @@ function AdminRoute({ children }) {
       }
       setIsLoading(false);
     });
-
+ 
     return () => unsubscribe();
   }, []);
-
+ 
   if (isLoading) {
     return <div>Loading...</div>;
   }
-
+ 
   if (!isAdmin) {
     return <Navigate to="/clientdashboard" replace />;
   }
-
+ 
   return children;
 }
 AdminRoute.propTypes = {
@@ -129,8 +130,18 @@ function Routers() {
           </ProtectedRoute>
         }
         />
+      <Route
+        path="/client-tickets"
+        element={
+          <ProtectedRoute>
+            <ClientTickets />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }
-
+ 
 export default Routers;
+ 
+ 

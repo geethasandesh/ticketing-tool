@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-
+ 
 function Client() {
   const [formData, setFormData] = useState({
     name: '',
@@ -40,19 +40,19 @@ function Client() {
   const [attachments, setAttachments] = useState([]);
   const [ticketId, setTicketId] = useState(null);
   const fileInputRef = useRef(null);
-
+ 
   const projects = [
     "Daikin",
     "VMM",
     "Danfoss"
   ];
-
+ 
   const priorities = [
     { value: 'Low', color: 'text-green-600', description: 'Non-urgent, can wait' },
     { value: 'Medium', color: 'text-yellow-600', description: 'Normal priority' },
     { value: 'High', color: 'text-red-600', description: 'Urgent, needs immediate attention' }
   ];
-
+ 
   const categories = [
     'Technical Issue',
     'Bug Report',
@@ -63,7 +63,7 @@ function Client() {
     'Complaint',
     'Feedback'
   ];
-
+ 
   const validateForm = async () => {
     const newErrors = {};
    
@@ -73,7 +73,7 @@ function Client() {
     if (!formData.subject.trim()) newErrors.subject = 'Subject is required';
     if (!formData.description.trim()) newErrors.description = 'Description is required';
     else if (formData.description.trim().length < 10) newErrors.description = 'Description must be at least 10 characters';
-
+ 
     // Check for duplicate tickets
     if (formData.subject.trim() && formData.email.trim()) {
       const isDuplicate = await checkDuplicateTicket(formData.subject, formData.email);
@@ -81,11 +81,11 @@ function Client() {
         newErrors.submit = 'A similar ticket was submitted in the last 24 hours. Please check your email for updates.';
       }
     }
-
+ 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-
+ 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
     const validFiles = files.filter(file => {
@@ -96,17 +96,17 @@ function Client() {
       }
       return true;
     });
-
+ 
     setAttachments(prev => [...prev, ...validFiles]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
-
+ 
   const removeAttachment = (index) => {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
-
+ 
   const getFileIcon = (file) => {
     const type = file.type.split('/')[0];
     switch (type) {
@@ -123,7 +123,7 @@ function Client() {
         return <File className="w-4 h-4" />;
     }
   };
-
+ 
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -131,7 +131,7 @@ function Client() {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
-
+ 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!await validateForm()) return;
@@ -175,7 +175,7 @@ function Client() {
         ticketNumber: `TKT-${Date.now()}`,
         lastUpdated: serverTimestamp()
       };
-
+ 
       // Add to Firestore
       const docRef = await addDoc(collection(db, 'tickets'), ticketData);
       setTicketId(docRef.id);
@@ -210,7 +210,7 @@ function Client() {
       setErrors({ submit: error.message || 'Failed to submit ticket. Please try again.' });
     }
   };
-
+ 
   // Add a function to check for duplicate tickets
   const checkDuplicateTicket = async (subject, email) => {
     const q = query(
@@ -220,14 +220,14 @@ function Client() {
    
     const querySnapshot = await getDocs(q);
     const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    
+   
     return querySnapshot.docs.some(doc => {
       const data = doc.data();
       const createdTime = data.created?.toDate?.() || new Date(data.created);
       return data.subject === subject && createdTime >= last24Hours;
     });
   };
-
+ 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -237,7 +237,7 @@ function Client() {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
-
+ 
   if (submitSuccess) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -263,24 +263,11 @@ function Client() {
       </div>
     );
   }
-
+ 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <MessageSquare className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Support Center</h1>
-              <p className="text-gray-600">Submit a support ticket and we'll help you out</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
+     
+ 
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Form */}
@@ -308,7 +295,7 @@ function Client() {
                     />
                     {errors.name && <p className="text-red-600 text-sm mt-1">{errors.name}</p>}
                   </div>
-
+ 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       <Mail className="w-4 h-4 inline mr-2" />
@@ -327,7 +314,7 @@ function Client() {
                     {errors.email && <p className="text-red-600 text-sm mt-1">{errors.email}</p>}
                   </div>
                 </div>
-
+ 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -343,7 +330,7 @@ function Client() {
                       placeholder="Enter your phone number"
                     />
                   </div>
-
+ 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       <Building className="w-4 h-4 inline mr-2" />
@@ -361,7 +348,7 @@ function Client() {
                     </select>
                   </div>
                 </div>
-
+ 
                 {/* Ticket Information */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -377,7 +364,7 @@ function Client() {
                       ))}
                     </select>
                   </div>
-
+ 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Priority Level</label>
                     <select
@@ -394,7 +381,7 @@ function Client() {
                     </select>
                   </div>
                 </div>
-
+ 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Subject *
@@ -411,7 +398,7 @@ function Client() {
                   />
                   {errors.subject && <p className="text-red-600 text-sm mt-1">{errors.subject}</p>}
                 </div>
-
+ 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Description *
@@ -431,7 +418,7 @@ function Client() {
                     Character count: {formData.description.length} (minimum 10 characters)
                   </p>
                 </div>
-
+ 
                 {/* Attachments Section */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -455,7 +442,7 @@ function Client() {
                       Add Files
                     </button>
                   </div>
-
+ 
                   {attachments.length > 0 && (
                     <div className="space-y-2">
                       {attachments.map((file, index) => (
@@ -482,7 +469,7 @@ function Client() {
                     </div>
                   )}
                 </div>
-
+ 
                 <div className="flex items-center justify-between pt-6">
                   <div className="flex items-center space-x-2 text-gray-600">
                     <span className="text-sm">
@@ -515,7 +502,7 @@ function Client() {
               </form>
             </div>
           </div>
-
+ 
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Quick Tips */}
@@ -539,7 +526,7 @@ function Client() {
                 </li>
               </ul>
             </div>
-
+ 
             {/* Priority Guide */}
             <div className="bg-white rounded-2xl shadow-xl p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -561,7 +548,7 @@ function Client() {
                 ))}
               </div>
             </div>
-
+ 
             {/* Contact Info */}
             <div className="bg-white rounded-2xl shadow-xl p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -583,5 +570,6 @@ function Client() {
     </div>
   );
 }
-
+ 
 export default Client;
+ 

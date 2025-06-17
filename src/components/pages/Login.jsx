@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "firebase/auth";
-import { getFirestore, collection, query, where, getDocs, updateDoc, deleteField } from "firebase/firestore";
+import { getFirestore, collection, query, where, getDocs, updateDoc, deleteField, doc, setDoc, deleteDoc } from "firebase/firestore";
 import artihcusLogo from '../../assets/artihcus-logo1.svg';
  
 const Login = () => {
@@ -29,27 +29,29 @@ const Login = () => {
     }
  
     try {
-      let userData;
-      let userDocRef;
+      let userData; // Data from the Firestore user document found by email
+      let userDocId;
+      let userDocRefByEmail; // Reference to the document found by email
  
-      // 1. Check for existing user in Firestore
+      // 1. Check for existing user in Firestore by email
       const usersQuery = query(collection(db, "users"), where("email", "==", email));
       const userSnapshot = await getDocs(usersQuery);
  
       if (!userSnapshot.empty) {
         userData = userSnapshot.docs[0].data();
-        userDocRef = userSnapshot.docs[0].ref;
+        userDocId = userSnapshot.docs[0].id;
+        userDocRefByEmail = userSnapshot.docs[0].ref;
  
         // Check if user already has an auth account
         const signInMethods = await fetchSignInMethodsForEmail(auth, email);
-        
+       
         if (userData.status === 'pending' && userData.password && signInMethods.length === 0) {
           // Only create auth account if user doesn't already have one
           try {
+            // Use the temporary password to create the Firebase Auth account
             await createUserWithEmailAndPassword(auth, email, userData.password);
           } catch (authError) {
             if (authError.code === 'auth/email-already-in-use') {
-              // If email is already in use, proceed to sign in
               console.log('Auth account already exists, proceeding to sign in');
             } else {
               console.error('Error creating Auth account for pending user:', authError);
@@ -64,11 +66,36 @@ const Login = () => {
       }
  
       // 2. Sign in the user
-      await signInWithEmailAndPassword(auth, email, password);
-     
-      // 3. Update user status in Firestore to 'active' and remove password if pending
-      if (userData.status === 'pending' && userDocRef) {
-        await updateDoc(userDocRef, {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const actualUid = userCredential.user.uid; // Get the actual Firebase Auth UID
+ 
+      // 3. Handle UID migration/synchronization if the Firestore document ID is temporary
+      if (userDocId !== actualUid) {
+        console.log(`UID mismatch: Firestore ID (${userDocId}) vs Auth UID (${actualUid}). Migrating document.`);
+       
+        // Create a new document with the actual Firebase Auth UID
+        const newUserDocRef = doc(db, 'users', actualUid);
+       
+        // Copy all data from the old document, add status: 'active', and remove password
+        const updatedUserData = { ...userData, status: 'active' };
+        delete updatedUserData.password; // Ensure temporary password is not copied
+ 
+        await setDoc(newUserDocRef, updatedUserData);
+        console.log('New user document created with actual UID.', newUserDocRef.id);
+ 
+        // Delete the old temporary document
+        await deleteDoc(userDocRefByEmail);
+        console.log('Old temporary user document deleted.', userDocRefByEmail.id);
+ 
+        // Update userDocRef and userData to point to the new, correct document for subsequent operations
+        userData = updatedUserData;
+        userDocId = actualUid;
+        // We don't need userDocRefByEmail anymore after deletion
+ 
+      } else if (userData.status === 'pending') {
+        // If UIDs match but status is still pending, update existing document
+        console.log('UIDs match, but status pending. Updating existing document.');
+        await updateDoc(userDocRefByEmail, {
           status: 'active',
           password: deleteField() // Remove the temporary password field
         });
@@ -77,12 +104,14 @@ const Login = () => {
       // 💾 Save login state and user data
       localStorage.setItem("isLoggedIn", "true");
       localStorage.setItem("userRole", userData.role);
-      localStorage.setItem("userId", userSnapshot.docs[0].id);
+      localStorage.setItem("userId", userDocId); // Use the (potentially updated) userDocId
       localStorage.setItem("userInfo", JSON.stringify({
         name: `${userData.firstName} ${userData.lastName}`,
         empId: userData.empId,
         clientId: userData.clientId,
-        role: userData.role
+        role: userData.role,
+        // Include project if it exists in userData for consistency
+        project: userData.project || null
       }));
  
       // 🚀 Redirect based on role
@@ -202,74 +231,27 @@ const Login = () => {
  
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              Don&apos;t have an account?{' '}
-              <Link
-                to="/register"
-                className="font-medium text-orange-500 hover:text-orange-400"
-              >
-                Register here
+              Don't have an account?{" "}
+              <Link to="/register" className="font-medium text-orange-500 hover:text-orange-400">
+                Register
               </Link>
             </p>
           </div>
         </div>
       </div>
  
-      {/* Right side - Illustration */}
-      <div className="hidden lg:flex flex-1 items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100 relative overflow-hidden">
-        <div className="relative z-10 text-center">
-          {/* Main illustration - person meditating */}
-          <div className="relative inline-block mb-8">
-            {/* Decorative elements around the person */}
-            <div className="absolute -top-8 -left-8 w-16 h-16 bg-orange-200 rounded-full opacity-60"></div>
-            <div className="absolute -top-4 -right-12 w-12 h-12 bg-orange-300 rounded-full opacity-40"></div>
-            <div className="absolute -bottom-6 -left-16 w-20 h-20 bg-orange-200 rounded-full opacity-50"></div>
-           
-            {/* Person illustration placeholder */}
-            <div className="w-80 h-80 bg-orange-200 rounded-full flex items-center justify-center">
-              <div className="w-32 h-32 bg-orange-500 rounded-full flex items-center justify-center">
-                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center">
-                  <svg className="w-8 h-8 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </div>
-            </div>
- 
-            {/* Floating avatars */}
-            <div className="absolute -top-12 left-12 w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-              <div className="w-8 h-8 bg-gray-400 rounded-full"></div>
-            </div>
-            <div className="absolute top-16 -right-8 w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-              <div className="w-8 h-8 bg-gray-400 rounded-full"></div>
-            </div>
-            <div className="absolute bottom-12 -left-8 w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-              <div className="w-8 h-8 bg-gray-400 rounded-full"></div>
-            </div>
-          </div>
- 
-          {/* Task card */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg max-w-xs mx-auto mb-8">
-            <div className="flex items-center justify-center h-20">
-              <img
-                src={artihcusLogo}
-                alt="Artihcus Logo"
-                className="w-full h-full object-contain"
-              />
-            </div>
-          </div>
- 
-          {/* Bottom text */}
-          <div className="text-center">
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">
-              Make your work easier and organized<br />
-              with <span className="text-orange-500">Artihcus</span>
-            </h3>
-          </div>
-        </div>
+      {/* Right side - Image */}
+      <div className="hidden lg:block relative w-0 flex-1">
+        <img
+          className="absolute inset-0 h-full w-full object-cover"
+          src={artihcusLogo}
+          alt="Artihcus Logo"
+        />
       </div>
     </div>
   );
 };
  
 export default Login;
+ 
  
