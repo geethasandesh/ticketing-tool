@@ -9,8 +9,6 @@ import Login from '../pages/Login';
 import Register from '../Register';
 import AdminTickets from '../pages/AdminTickets';
 import PropTypes from 'prop-types';
- 
- 
 import { auth, db } from '../../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { query, collection, where, getDocs } from 'firebase/firestore';
